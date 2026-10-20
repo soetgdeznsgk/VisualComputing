@@ -27,18 +27,51 @@ body {
   display: block;
 }
 
-#webcam {
+#camera-container {
   position: absolute;
   bottom: 16px;
   right: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 0px;
+  align-items: flex-end;
+}
+
+#camera-label {
+  width: 200px;
+  text-align: center;
+}
+
+#camera-arrow {
+  width: 200px;
+  text-align: center;
+  font-size: 48px;
+  line-height: 1;
+}
+
+#webcam {
+  position: static;
   width: 200px;
   border-radius: 8px;
   border: 2px solid rgba(255, 255, 255, 0.2);
-  transform: scaleX(-1); /* espejo */
+  transform: scaleX(-1);
 }
 
 #controls {
   position: absolute;
-  top: 16px;
+  top: 10%;
   left: 16px;
+}
+
+#credits {
+  position: absolute;
+  top: 45%;
+  right: 16px;
+  text-align: right;
+  color: #444870;
+  font-style: italic;
+}
+#credits a,
+#credits a:visited {
+  color:inherit
 }

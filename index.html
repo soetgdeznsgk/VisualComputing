@@ -10,8 +10,27 @@
   <div id="app">
     <!-- Persona 3 arma el layout aqui -->
     <canvas id="canvas3d"></canvas>
-    <video id="webcam" autoplay playsinline></video>
-    <div id="controls"></div>
+    <div id="camera-container">
+      <p id="camera-label">You!</p>
+      <p id="camera-arrow">&darr;</p>
+      
+      <video id="webcam" autoplay playsinline></video>
+    </div>
+    <div id="controls">
+      <section class="instructions">
+        <h2>How to use</h2>
+      </section>
+    </div>
+    <div id="credits">
+      <section class="instructions">
+        <h5>Developed by</h5>
+        <dl>
+          <dd><a href="https://github.com/andrefalar" target="_blank" rel="noopener noreferrer">Sebastián Gámez Ariza</a></dd>
+          <dd><a href="https://github.com/SebastianGamez" target="_blank" rel="noopener noreferrer">Andrés Alarcón Pulido</a></dd>
+          <dd><a href="https://github.com/soetgdeznsgk" target="_blank" rel="noopener noreferrer">Emiliano Guerra Gallego</a></dd>
+        </dl>
+      </section>
+    </div>
   </div>
   <script type="module" src="src/app.js"></script>
 </body>
