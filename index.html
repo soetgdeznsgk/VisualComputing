@@ -3,34 +3,97 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Taller 1 - Dibujo 3D con Gestos</title>
+  <title>Bloques 3D con Gestos</title>
   <link rel="stylesheet" href="src/styles.css" />
 </head>
 <body>
   <div id="app">
-    <!-- Persona 3 arma el layout aqui -->
+    <!-- Escena 3D (Three.js) -->
     <canvas id="canvas3d"></canvas>
+
+    <!-- Caja de herramientas: elegir pieza y color (ui.js llena los botones) -->
+    <aside id="toolbox" class="panel">
+      <h1>Bloques 3D</h1>
+      <h2>Piezas</h2>
+      <div id="piece-grid"></div>
+      <h2>Color</h2>
+      <div id="color-row"></div>
+      <div class="actions">
+        <button id="btn-clear" class="dwellable" type="button">Limpiar mesa</button>
+        <button id="btn-view" class="dwellable" type="button">Restablecer vista</button>
+      </div>
+      <p id="piece-count"></p>
+    </aside>
+
+    <!-- Estado de cada mano -->
+    <section id="status" class="panel">
+      <div class="hand-chip" id="chip-left">
+        <span class="hand-name">Mano izquierda · cámara</span>
+        <span class="hand-pose">—</span>
+        <span class="hand-action"></span>
+      </div>
+      <div id="mode-badge"></div>
+      <div class="hand-chip" id="chip-right">
+        <span class="hand-name">Mano derecha · piezas</span>
+        <span class="hand-pose">—</span>
+        <span class="hand-action"></span>
+      </div>
+    </section>
+
+    <!-- Papelera: soltar una pieza aqui la elimina -->
+    <div id="trash" class="panel">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/></svg>
+      <span>Papelera</span>
+      <small>Suelta aquí una pieza</small>
+    </div>
+
+    <!-- Ayuda -->
+    <details id="help" class="panel" open>
+      <summary>Cómo jugar</summary>
+      <h3>✋ Mano derecha — piezas</h3>
+      <ul>
+        <li><b>Mover la mano:</b> mueve el cursor</li>
+        <li><b>Pellizco</b> (pulgar + índice) sobre una pieza: agarrarla</li>
+        <li><b>Acercar / alejar la mano</b> de la cámara: empujar al fondo / traer</li>
+        <li><b>Girar la muñeca:</b> rotar la pieza</li>
+        <li><b>Abrir los dedos:</b> soltar (o lanzar)</li>
+        <li><b>Mantener el cursor</b> sobre un botón: presionarlo</li>
+      </ul>
+      <h3>🤚 Mano izquierda — cámara</h3>
+      <ul>
+        <li><b>Puño + mover:</b> girar la vista</li>
+        <li><b>Pellizco + subir / bajar:</b> zoom</li>
+        <li><b>V sostenida:</b> restablecer la vista</li>
+        <li><b>Mano abierta:</b> descansar</li>
+      </ul>
+      <h3>🖱️ Sin cámara</h3>
+      <ul>
+        <li>Clic izquierdo: agarrar · Rueda: profundidad / zoom</li>
+        <li>Q / E: rotar · Clic derecho: girar vista · R: vista inicial</li>
+        <li>Supr: borrar la pieza bajo el cursor</li>
+      </ul>
+      <p class="credits">
+        Taller 1 · Computación Visual —
+        <a href="https://github.com/andrefalar" target="_blank" rel="noopener noreferrer">Andrés Alarcón Pulido</a>,
+        <a href="https://github.com/SebastianGamez" target="_blank" rel="noopener noreferrer">Sebastián Gámez Ariza</a>,
+        <a href="https://github.com/soetgdeznsgk" target="_blank" rel="noopener noreferrer">Emiliano Guerra Gallego</a>
+      </p>
+    </details>
+
+    <!-- Vista de la camara con el esqueleto de las manos encima -->
     <div id="camera-container">
-      <p id="camera-label">You!</p>
-      <p id="camera-arrow">&darr;</p>
-      
-      <video id="webcam" autoplay playsinline></video>
+      <div id="video-wrap">
+        <video id="webcam" autoplay playsinline muted></video>
+        <canvas id="hand-overlay"></canvas>
+      </div>
+      <p id="tracker-status">Iniciando cámara…</p>
     </div>
-    <div id="controls">
-      <section class="instructions">
-        <h2>How to use</h2>
-      </section>
-    </div>
-    <div id="credits">
-      <section class="instructions">
-        <h5>Developed by</h5>
-        <dl>
-          <dd><a href="https://github.com/andrefalar" target="_blank" rel="noopener noreferrer">Sebastián Gámez Ariza</a></dd>
-          <dd><a href="https://github.com/SebastianGamez" target="_blank" rel="noopener noreferrer">Andrés Alarcón Pulido</a></dd>
-          <dd><a href="https://github.com/soetgdeznsgk" target="_blank" rel="noopener noreferrer">Emiliano Guerra Gallego</a></dd>
-        </dl>
-      </section>
-    </div>
+
+    <!-- Cursor de la mano derecha (anillo con progreso para "presionar") -->
+    <div id="hand-cursor" aria-hidden="true"></div>
+
+    <!-- Mensajes cortos -->
+    <div id="toast" role="status"></div>
   </div>
   <script type="module" src="src/app.js"></script>
 </body>
