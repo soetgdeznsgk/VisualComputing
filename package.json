@@ -9,8 +9,7 @@
   },
   "dependencies": {
     "@mediapipe/hands": "^0.4.1675469240",
-    "@mediapipe/camera_utils": "^0.3.1675466862",
-    "@mediapipe/drawing_utils": "^0.3.1675466124",
+    "cannon-es": "^0.20.0",
     "three": "^0.160.0"
   },
   "devDependencies": {
