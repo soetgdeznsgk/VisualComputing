@@ -14,6 +14,13 @@
 //
 // Para agregar una pieza nueva: anadir una entrada a PIECES con
 // id, name, icon (SVG) y build().
+//
+// Opciones de cada entrada:
+//   palette: false     no aparece en la caja de bloques (fichas, dados)
+//   material           'wood' (por defecto) | 'plastic' | 'die'
+//   snappable: true    se acomoda en las casillas imantadas (snapping.js)
+//   restHeight         altura del centro de masa en reposo (para acomodarla)
+//   keepUV: true       conserva los UV originales (el dado usa una textura por cara)
 // ============================================================
 
 import * as THREE from 'three';
@@ -273,7 +280,51 @@ export const PIECES = [
       size: 1,
     }),
   },
+
+  // --- Piezas de juegos de mesa (no salen en la caja de bloques) ---
+  {
+    id: 'pawn',
+    name: 'Ficha',
+    palette: false,
+    material: 'plastic',
+    snappable: true,      // se acomoda en las casillas del tablero
+    restHeight: 0.3,      // altura del centro de masa cuando esta de pie
+    build: () => {
+      // Silueta de peon (radio, altura) que se gira alrededor del eje Y.
+      // La base queda en y = -0.3, asi el origen esta cerca del centro de masa
+      // (la base es la parte mas pesada) y la ficha se para con estabilidad.
+      const profile = [
+        [0, 0], [0.24, 0], [0.24, 0.06], [0.2, 0.11], [0.13, 0.28], [0.1, 0.48],
+        [0.15, 0.53], [0.17, 0.62], [0.15, 0.71], [0.09, 0.77], [0, 0.8],
+      ].map(([r, y]) => new THREE.Vector2(r, y - 0.3));
+      const geometry = new THREE.LatheGeometry(profile, 24);
+      // Fisica: cilindro de 16 lados del mismo alto (-0.3 .. 0.5)
+      const poly = prismPolyhedron(circlePoints(0.22, 16), 0.8);
+      return {
+        geometry,
+        shapes: [{ shape: makeConvex(zToY(poly.vertices), poly.faces), offset: new CANNON.Vec3(0, 0.1, 0) }],
+        volume: 0.35,
+        size: 0.4,
+      };
+    },
+  },
+  {
+    id: 'die',
+    name: 'Dado',
+    palette: false,
+    material: 'die',      // 6 materiales, uno por cara (ver diceTextures.js)
+    keepUV: true,         // cada cara usa la textura completa
+    build: box(1.4, 1.4, 1.4),
+  },
 ];
+
+/** Piezas que salen en la caja de bloques de construccion. */
+export const BUILD_PIECES = PIECES.filter((p) => p.palette !== false);
+
+/** Definicion de una pieza por su id. */
+export function pieceById(id) {
+  return PIECES.find((p) => p.id === id);
+}
 
 /** Colores de juguete. 'mix' elige uno al azar para cada pieza nueva. */
 export const COLORS = [
@@ -287,8 +338,12 @@ export const COLORS = [
   { id: 'purple', name: 'Morado', hex: '#8c5bb5' },
 ];
 
-/** Devuelve el hex de un color del catalogo ('mix' = uno al azar). */
+/**
+ * Devuelve el hex de un color: acepta un id del catalogo ('mix' = uno al
+ * azar) o directamente un hex ('#d9473b', lo usan los tableros).
+ */
 export function resolveColor(colorId) {
+  if (colorId?.startsWith?.('#')) return colorId;
   const solid = COLORS.filter((c) => c.hex);
   const found = COLORS.find((c) => c.id === colorId);
   if (found?.hex) return found.hex;
@@ -307,7 +362,7 @@ export function buildPiece(id) {
   const def = PIECES.find((p) => p.id === id);
   if (!def) throw new Error(`Pieza desconocida: ${id}`);
   const fresh = def.build();
-  if (!built.has(id)) built.set(id, applyBoxUV(fresh.geometry));
+  if (!built.has(id)) built.set(id, def.keepUV ? fresh.geometry : applyBoxUV(fresh.geometry));
   else fresh.geometry.dispose();
   return { def, ...fresh, geometry: built.get(id) };
 }

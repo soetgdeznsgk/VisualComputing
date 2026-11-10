@@ -2,7 +2,9 @@
 // ui.js — Interfaz: paneles, cursor de la mano y papelera
 // ============================================================
 // Responsabilidades:
-//   - Crear los botones de piezas y colores
+//   - Crear las pestanas de tableros y los botones de piezas y colores
+//   - Mostrar u ocultar paneles segun el tablero (setBoardUI)
+//   - Mostrar el resultado de los dados
 //   - "Presionar" botones con la mano: mantener el cursor encima un
 //     momento (dwell). Cualquier boton con la clase .dwellable funciona.
 //   - Mostrar el estado de cada mano y el modo (manos / raton)
@@ -11,7 +13,8 @@
 //   - Mensajes cortos (toast)
 // ============================================================
 
-import { PIECES, COLORS } from './pieceCatalog.js';
+import { BUILD_PIECES, COLORS } from './pieceCatalog.js';
+import { BOARDS } from './boards/index.js';
 import { DWELL, PHYSICS } from './config.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -26,14 +29,30 @@ export function getSelectedColor() {
 /**
  * Crea los botones y conecta sus acciones.
  * @param {object} actions
+ * @param {(boardId:string) => void} actions.onSelectBoard
  * @param {(type:string) => void} actions.onSpawn
  * @param {() => void} actions.onClear
+ * @param {() => void} actions.onResetBoard
+ * @param {() => void} actions.onRollDice
  * @param {() => void} actions.onResetView
  */
-export function initUI({ onSpawn, onClear, onResetView }) {
-  // Botones de piezas
+export function initUI({ onSelectBoard, onSpawn, onClear, onResetBoard, onRollDice, onResetView }) {
+  // Pestanas de tableros
+  const tabs = $('#board-tabs');
+  BOARDS.forEach((b) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'board-tab dwellable';
+    btn.dataset.board = b.id;
+    btn.setAttribute('role', 'tab');
+    btn.textContent = b.name;
+    btn.addEventListener('click', () => onSelectBoard(b.id));
+    tabs.appendChild(btn);
+  });
+
+  // Botones de piezas (solo los bloques de construccion)
   const grid = $('#piece-grid');
-  PIECES.forEach((p) => {
+  BUILD_PIECES.forEach((p) => {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'piece-btn dwellable';
@@ -61,7 +80,54 @@ export function initUI({ onSpawn, onClear, onResetView }) {
   });
 
   $('#btn-clear').addEventListener('click', onClear);
+  $('#btn-reset').addEventListener('click', onResetBoard);
+  $('#btn-roll').addEventListener('click', onRollDice);
   $('#btn-view').addEventListener('click', onResetView);
+}
+
+/**
+ * Adapta los paneles al tablero actual (que secciones y botones se ven).
+ * @param {object} board — definicion de boards/index.js
+ */
+export function setBoardUI(board) {
+  document.querySelectorAll('.board-tab').forEach((t) => {
+    const active = t.dataset.board === board.id;
+    t.classList.toggle('selected', active);
+    t.setAttribute('aria-selected', String(active));
+  });
+  $('#build-section').hidden = !board.ui.buildPalette;
+  $('#dice-section').hidden = !board.ui.dice;
+  $('#btn-clear').hidden = !board.ui.buildPalette;
+  $('#btn-reset').hidden = board.ui.buildPalette;
+  $('#trash').hidden = !board.ui.trash;
+  $('#dice-last').textContent = 'Lanza los dados para empezar';
+  $('#dice-result').classList.remove('visible');
+}
+
+// ------------------------------------------------------------
+// Resultado de los dados
+// ------------------------------------------------------------
+
+let diceTimer = null;
+
+/** Muestra el resultado de los dados en grande unos segundos y en el panel. */
+export function showDiceResult({ values, total, doubles, cocked }) {
+  if (cocked) {
+    $('#dice-last').textContent = 'Un dado quedó inclinado: vuelve a lanzar';
+    toast('Un dado quedó inclinado: vuelve a lanzar');
+    return;
+  }
+  const text = `${values.join(' + ')} = ${total}`;
+  $('#dice-last').textContent = `Última tirada: ${text}${doubles ? ' (pares)' : ''}`;
+
+  const el = $('#dice-result');
+  el.innerHTML = `
+    <div class="dice-faces">${values.map((v) => `<span class="die-face">${v}</span>`).join('')}</div>
+    <div class="dice-total">${total}</div>
+    ${doubles ? '<div class="dice-doubles">¡Pares!</div>' : ''}`;
+  el.classList.add('visible');
+  clearTimeout(diceTimer);
+  diceTimer = setTimeout(() => el.classList.remove('visible'), 3500);
 }
 
 // ------------------------------------------------------------
@@ -146,7 +212,9 @@ function flash(el) {
 
 /** Si un punto de la pantalla (0..1) esta sobre la papelera. */
 export function isOverTrash(screen) {
-  const r = $('#trash').getBoundingClientRect();
+  const trash = $('#trash');
+  if (trash.hidden) return false; // este tablero no tiene papelera
+  const r = trash.getBoundingClientRect();
   const x = screen.x * window.innerWidth;
   const y = screen.y * window.innerHeight;
   return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;

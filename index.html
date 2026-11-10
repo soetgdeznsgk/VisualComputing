@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Bloques 3D con Gestos</title>
+  <title>Mesa de juegos 3D con gestos</title>
   <link rel="stylesheet" href="src/styles.css" />
 </head>
 <body>
@@ -13,17 +13,38 @@
 
     <!-- Caja de herramientas: elegir pieza y color (ui.js llena los botones) -->
     <aside id="toolbox" class="panel">
-      <h1>Bloques 3D</h1>
-      <h2>Piezas</h2>
-      <div id="piece-grid"></div>
-      <h2>Color</h2>
-      <div id="color-row"></div>
+      <h1>Mesa de juegos 3D</h1>
+
+      <!-- Selector de tablero (ui.js crea un boton por tablero de boards/index.js) -->
+      <h2>Juego</h2>
+      <div id="board-tabs" role="tablist"></div>
+
+      <!-- Construccion libre -->
+      <section id="build-section">
+        <h2>Piezas</h2>
+        <div id="piece-grid"></div>
+        <h2>Color</h2>
+        <div id="color-row"></div>
+      </section>
+
+      <!-- Parques -->
+      <section id="dice-section" hidden>
+        <h2>Dados</h2>
+        <div id="dice-last">Lanza los dados para empezar</div>
+        <button id="btn-roll" class="dwellable primary" type="button">🎲 Lanzar dados</button>
+        <p class="hint">También puedes agarrar un dado y lanzarlo con la mano.</p>
+      </section>
+
       <div class="actions">
         <button id="btn-clear" class="dwellable" type="button">Limpiar mesa</button>
+        <button id="btn-reset" class="dwellable" type="button" hidden>Reiniciar partida</button>
         <button id="btn-view" class="dwellable" type="button">Restablecer vista</button>
       </div>
       <p id="piece-count"></p>
     </aside>
+
+    <!-- Resultado de los dados (aparece unos segundos al terminar de rodar) -->
+    <div id="dice-result" aria-live="polite"></div>
 
     <!-- Estado de cada mano -->
     <section id="status" class="panel">
@@ -48,7 +69,7 @@
     </div>
 
     <!-- Ayuda -->
-    <details id="help" class="panel" open>
+    <details id="help" class="panel">
       <summary>Cómo jugar</summary>
       <h3>✋ Mano derecha — piezas</h3>
       <ul>
@@ -65,6 +86,12 @@
         <li><b>Pellizco + subir / bajar:</b> zoom</li>
         <li><b>V sostenida:</b> restablecer la vista</li>
         <li><b>Mano abierta:</b> descansar</li>
+      </ul>
+      <h3>🎲 Parqués</h3>
+      <ul>
+        <li><b>Fichas:</b> suéltalas cerca de una casilla y se acomodan solas (el anillo blanco muestra dónde caerán)</li>
+        <li><b>Dados:</b> agárralos y lánzalos, o usa el botón; el resultado aparece arriba</li>
+        <li>Las reglas las ponen los jugadores 🙂</li>
       </ul>
       <h3>🖱️ Sin cámara</h3>
       <ul>

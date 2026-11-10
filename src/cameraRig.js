@@ -22,7 +22,9 @@ export class CameraRig {
   constructor(camera) {
     this.camera = camera;
     this.target = new THREE.Vector3(CAMERA.target.x, CAMERA.target.y, CAMERA.target.z);
-    this.desired = { radius: CAMERA.radius, theta: CAMERA.theta, phi: CAMERA.phi };
+    // Vista "de inicio": cada tablero puede definir la suya (setHome)
+    this.home = { radius: CAMERA.radius, theta: CAMERA.theta, phi: CAMERA.phi };
+    this.desired = { ...this.home };
     this.current = { ...this.desired };
 
     // Estado de la mano izquierda
@@ -44,10 +46,24 @@ export class CameraRig {
     this.desired.radius = clamp(this.desired.radius * factor, CAMERA.minRadius, CAMERA.maxRadius);
   }
 
-  /** Vuelve a la vista inicial (por el camino mas corto en theta). */
+  /** Vuelve a la vista de inicio (por el camino mas corto en theta). */
   reset() {
-    const turns = Math.round(this.desired.theta / (Math.PI * 2));
-    this.desired = { radius: CAMERA.radius, theta: CAMERA.theta + turns * Math.PI * 2, phi: CAMERA.phi };
+    const turns = Math.round((this.desired.theta - this.home.theta) / (Math.PI * 2));
+    this.desired = { ...this.home, theta: this.home.theta + turns * Math.PI * 2 };
+  }
+
+  /**
+   * Cambia la vista de inicio (cada tablero tiene la suya) y va hacia ella.
+   * @param {{radius?:number, theta?:number, phi?:number, targetY?:number}} preset
+   */
+  setHome(preset = {}) {
+    this.home = {
+      radius: preset.radius ?? CAMERA.radius,
+      theta: preset.theta ?? CAMERA.theta,
+      phi: preset.phi ?? CAMERA.phi,
+    };
+    this.target.y = preset.targetY ?? CAMERA.target.y;
+    this.reset();
   }
 
   /**

@@ -8,6 +8,10 @@
 //   raton/teclado (mouseInput) ─────────────────────┘   (si no hay mano derecha)
 //
 //   interaction ──> physics (cannon-es) ──> pieces (copia a Three.js) ──> render
+//        └─> snapping (fichas en casillas)        └─> dice (lee el resultado)
+//
+// El tablero actual (bloques libres, parques...) lo carga boardManager.js
+// desde las definiciones de boards/.
 //
 // Si la camara no esta disponible (permiso negado, sin webcam), la app
 // sigue funcionando con el raton.
@@ -21,12 +25,12 @@ import { stepPhysics } from './physics.js';
 import { spawnPiece, removePiece, clearPieces, syncPieces, pieces } from './pieces.js';
 import { interaction, updateInteraction } from './interaction.js';
 import { mouse, initMouseInput, updateMouse } from './mouseInput.js';
+import { loadBoard, boardState } from './boardManager.js';
+import { updateDice, rollDice } from './dice.js';
 import {
-  initUI, getSelectedColor, updateHandCursor, updateStatus, updateTrash,
-  isOverTrash, drawHands, setTrackerStatus, toast,
+  initUI, setBoardUI, getSelectedColor, updateHandCursor, updateStatus, updateTrash,
+  isOverTrash, drawHands, setTrackerStatus, showDiceResult, toast,
 } from './ui.js';
-
-const STARTER_PIECES = ['cube', 'brick', 'cylinder', 'pyramid', 'arch', 'roof'];
 
 let rig;
 let lastSource = null;  // 'hand' | 'mouse' — quien controla la mano derecha
@@ -42,12 +46,25 @@ function main() {
 
   // 2. Interfaz
   initUI({
+    onSelectBoard: (id) => {
+      if (boardState.current?.id === id) return;
+      selectBoard(id);
+      toast(`Juego: ${boardState.current.name}`);
+    },
     onSpawn: (type) => {
       if (!spawnPiece(type, getSelectedColor())) toast('Llegaste al límite de piezas: elimina algunas');
     },
     onClear: () => {
       clearPieces();
       toast('Mesa limpia');
+    },
+    onResetBoard: () => {
+      selectBoard(boardState.current.id);
+      toast('Partida reiniciada');
+    },
+    onRollDice: () => {
+      const zone = boardState.current?.diceZone;
+      if (zone) rollDice(zone, interaction.held);
     },
     onResetView: () => rig.reset(),
   });
@@ -56,12 +73,14 @@ function main() {
   initMouseInput(canvas, rig, {
     isHolding: () => !!interaction.held,
     onDelete: () => {
+      // Solo en tableros con papelera (en parques no se borran fichas)
+      if (!boardState.current?.ui.trash) return;
       if (interaction.hovered && !interaction.held) removePiece(interaction.hovered);
     },
   });
 
-  // Algunas piezas para empezar
-  STARTER_PIECES.forEach((type) => spawnPiece(type, 'mix'));
+  // Tablero inicial: construccion libre
+  selectBoard('free');
 
   // 4. Loop principal (arranca ya; la camara se suma cuando este lista)
   requestAnimationFrame(loop);
@@ -78,6 +97,12 @@ function main() {
       setTrackerStatus(`Sin cámara (${trackerStatus.message}). Usa el ratón.`, true);
       toast('Sin cámara: puedes jugar con el ratón');
     });
+}
+
+/** Carga un tablero y adapta la interfaz. */
+function selectBoard(id) {
+  const board = loadBoard(id, rig);
+  setBoardUI(board);
 }
 
 function loop(now) {
@@ -132,6 +157,8 @@ function loop(now) {
   // --- Fisica y render ---
   stepPhysics();
   if (syncPieces() > 0) toast('Una pieza cayó de la mesa');
+  const roll = updateDice(interaction.held);
+  if (roll) showDiceResult(roll);
   renderScene();
 
   // --- Indicadores ---

@@ -13,7 +13,8 @@
 //      alejarla la trae hacia ti.
 //   4. Rotar: girar la muneca gira la pieza alrededor del eje de la vista.
 //   5. Soltar: la pieza conserva su velocidad (se puede lanzar) y la
-//      fisica se encarga de que caiga y choque.
+//      fisica se encarga de que caiga y choque. Si es una ficha y el
+//      tablero tiene casillas imantadas, snapping.js la acomoda.
 //
 // La pieza agarrada NO se teletransporta: en cada paso de la fisica se le
 // da la velocidad necesaria para llegar al objetivo. Asi sigue chocando
@@ -24,6 +25,8 @@ import * as THREE from 'three';
 import { GRAB, TABLE } from './config.js';
 import { onPreStep } from './physics.js';
 import { pieces, pieceFromMesh, pieceMeshes, setHighlight, removePiece } from './pieces.js';
+import { driveBody } from './bodyControl.js';
+import { trySnap, cancelSnap, updateSnapPreview, hideSnapPreview } from './snapping.js';
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
@@ -66,7 +69,6 @@ const grab = {
 
 // Temporales reutilizados (evita crear objetos cada frame)
 const tmpQ = new THREE.Quaternion();
-const tmpQ2 = new THREE.Quaternion();
 const forward = new THREE.Vector3();
 
 function setHovered(piece) {
@@ -85,6 +87,7 @@ function startHold(piece, hitPoint, camera, intent) {
   grab.startQuat.copy(piece.body.quaternion);
   grab.target.copy(piece.body.position);
   grab.targetQuat.copy(grab.startQuat);
+  cancelSnap(piece); // si se estaba deslizando a una casilla, ahora manda la mano
   setHighlight(piece, true);
 }
 
@@ -102,6 +105,7 @@ function release() {
   piece.body.angularVelocity.scale(0.3, piece.body.angularVelocity);
   interaction.held = null;
   setHighlight(piece, piece === interaction.hovered);
+  hideSnapPreview();
   return piece;
 }
 
@@ -142,9 +146,12 @@ export function updateInteraction(intent, camera, isOverTrash) {
         if (interaction.hovered === piece) interaction.hovered = null;
         removePiece(piece);
         result.trashed = true;
+      } else if (piece) {
+        trySnap(piece); // si es una ficha cerca de una casilla, se acomoda sola
       }
     } else {
       updateTarget(intent, camera);
+      updateSnapPreview(interaction.held); // resalta la casilla donde caeria
     }
   }
 
@@ -201,37 +208,11 @@ function updateTarget(intent, camera) {
 }
 
 /**
- * Control de la pieza agarrada en cada sub-paso de la fisica.
- * Velocidad lineal: proporcional a la distancia al objetivo.
- * Velocidad angular: proporcional al angulo que falta para la rotacion objetivo.
+ * Control de la pieza agarrada en cada sub-paso de la fisica: se le da la
+ * velocidad necesaria para llegar a grab.target / grab.targetQuat
+ * (ver bodyControl.js).
  */
 onPreStep(() => {
   const piece = interaction.held;
-  if (!piece) return;
-  const body = piece.body;
-  body.wakeUp();
-
-  // --- Posicion ---
-  let vx = (grab.target.x - body.position.x) * GRAB.positionGain;
-  let vy = (grab.target.y - body.position.y) * GRAB.positionGain;
-  let vz = (grab.target.z - body.position.z) * GRAB.positionGain;
-  const speed = Math.hypot(vx, vy, vz);
-  if (speed > GRAB.maxSpeed) {
-    const s = GRAB.maxSpeed / speed;
-    vx *= s; vy *= s; vz *= s;
-  }
-  body.velocity.set(vx, vy, vz);
-
-  // --- Rotacion: error = objetivo * actual^-1, convertido a eje-angulo ---
-  tmpQ2.set(body.quaternion.x, body.quaternion.y, body.quaternion.z, body.quaternion.w).invert();
-  tmpQ.copy(grab.targetQuat).multiply(tmpQ2);
-  if (tmpQ.w < 0) tmpQ.set(-tmpQ.x, -tmpQ.y, -tmpQ.z, -tmpQ.w); // camino mas corto
-  const angle = 2 * Math.acos(clamp(tmpQ.w, -1, 1));
-  const s = Math.sqrt(1 - tmpQ.w * tmpQ.w);
-  if (angle < 1e-3 || s < 1e-6) {
-    body.angularVelocity.set(0, 0, 0);
-  } else {
-    const k = (angle * GRAB.rotationGain) / s;
-    body.angularVelocity.set(tmpQ.x * k, tmpQ.y * k, tmpQ.z * k);
-  }
+  if (piece) driveBody(piece.body, grab.target, grab.targetQuat, GRAB);
 });
