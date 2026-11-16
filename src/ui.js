@@ -5,6 +5,7 @@
 //   - Crear las pestanas de tableros y los botones de piezas y colores
 //   - Mostrar u ocultar paneles segun el tablero (setBoardUI)
 //   - Mostrar el resultado de los dados
+//   - Panel de la mesa compartida: unirse, jugadores conectados, invitar
 //   - "Presionar" botones con la mano: mantener el cursor encima un
 //     momento (dwell). Cualquier boton con la clase .dwellable funciona.
 //   - Mostrar el estado de cada mano y el modo (manos / raton)
@@ -35,8 +36,10 @@ export function getSelectedColor() {
  * @param {() => void} actions.onResetBoard
  * @param {() => void} actions.onRollDice
  * @param {() => void} actions.onResetView
+ * @param {(name:string) => void} actions.onJoin — unirse a la mesa compartida
+ * @param {() => void} actions.onLeave — volver a jugar solo
  */
-export function initUI({ onSelectBoard, onSpawn, onClear, onResetBoard, onRollDice, onResetView }) {
+export function initUI({ onSelectBoard, onSpawn, onClear, onResetBoard, onRollDice, onResetView, onJoin, onLeave }) {
   // Pestanas de tableros
   const tabs = $('#board-tabs');
   BOARDS.forEach((b) => {
@@ -83,6 +86,70 @@ export function initUI({ onSelectBoard, onSpawn, onClear, onResetBoard, onRollDi
   $('#btn-reset').addEventListener('click', onResetBoard);
   $('#btn-roll').addEventListener('click', onRollDice);
   $('#btn-view').addEventListener('click', onResetView);
+
+  // Mesa compartida: el nombre se recuerda en este navegador
+  const nameInput = $('#player-name');
+  try { nameInput.value = localStorage.getItem('mesa-player-name') ?? ''; } catch { /* sin almacenamiento */ }
+  const join = () => {
+    const name = nameInput.value.trim();
+    try { localStorage.setItem('mesa-player-name', name); } catch { /* sin almacenamiento */ }
+    onJoin(name);
+  };
+  $('#btn-join').addEventListener('click', join);
+  nameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') join(); });
+  $('#btn-leave').addEventListener('click', onLeave);
+}
+
+// ------------------------------------------------------------
+// Mesa compartida (multijugador)
+// ------------------------------------------------------------
+
+const NET_TEXT = {
+  offline: 'Juegas solo en este computador.',
+  connecting: 'Conectando con la mesa compartida…',
+  online: 'Conectado a la mesa compartida.',
+  reconnecting: 'Se perdió la conexión. Reintentando…',
+};
+
+/** Estado de la conexion: 'offline' | 'connecting' | 'online' | 'reconnecting'. */
+export function setNetStatus(state) {
+  const el = $('#net-status');
+  el.textContent = NET_TEXT[state] ?? state;
+  el.dataset.state = state;
+  $('#net-join').hidden = state !== 'offline';
+  $('#net-online').hidden = state === 'offline';
+}
+
+/**
+ * Lista de jugadores y como invitar a otros.
+ * @param {Array<{id,name,color}>} players
+ * @param {{id}|null} me
+ * @param {string[]} addresses — IPs de la red local del servidor
+ */
+export function updatePlayers(players, me, addresses) {
+  const list = $('#player-list');
+  list.replaceChildren(...players.map((p) => {
+    const li = document.createElement('li');
+    const dot = document.createElement('span');
+    dot.className = 'player-dot';
+    dot.style.background = p.color;
+    const name = document.createElement('span');
+    name.textContent = p.id === me?.id ? `${p.name} (tú)` : p.name; // textContent: los nombres no se interpretan como HTML
+    li.append(dot, name);
+    return li;
+  }));
+
+  // Como invitar: la direccion de este servidor en la red local
+  const invite = $('#net-invite');
+  const local = ['localhost', '127.0.0.1'].includes(location.hostname);
+  if (local && location.protocol === 'http:') {
+    invite.textContent = 'Para jugar desde otros computadores, inicia el proyecto con "npm run lan".';
+  } else if (addresses.length) {
+    const port = location.port ? `:${location.port}` : '';
+    invite.textContent = `Invita a otros (misma red): ${addresses.map((ip) => `${location.protocol}//${ip}${port}`).join('  o  ')}`;
+  } else {
+    invite.textContent = '';
+  }
 }
 
 /**

@@ -11,9 +11,8 @@ export const freeBuild = {
   name: 'Bloques',
   ui: { buildPalette: true, trash: true, dice: false },
   camera: {}, // vista por defecto de config.js
-  cell: 1,
-  snapPoints: [],
-  createMat: null,
+  mat: null,  // sin tapete: la mesa de madera sola
+  snap: null, // los bloques se apoyan libremente
 
   /** Algunos bloques al azar para empezar (caen desde arriba). */
   setup() {

@@ -68,6 +68,24 @@
       <small>Suelta aquí una pieza</small>
     </div>
 
+    <!-- Columna derecha: mesa compartida + ayuda -->
+    <div id="side-right">
+    <!-- Mesa compartida (multijugador en red local) -->
+    <section id="net-panel" class="panel">
+      <h2>Mesa compartida</h2>
+      <p id="net-status" data-state="offline">Juegas solo en este computador.</p>
+      <div id="net-join">
+        <label for="player-name" class="hint">Tu nombre</label>
+        <input id="player-name" type="text" maxlength="20" placeholder="Jugador" autocomplete="off" />
+        <button id="btn-join" class="dwellable primary" type="button">Unirse a la mesa compartida</button>
+      </div>
+      <div id="net-online" hidden>
+        <ul id="player-list"></ul>
+        <p id="net-invite" class="hint"></p>
+        <button id="btn-leave" class="dwellable" type="button">Salir y jugar solo</button>
+      </div>
+    </section>
+
     <!-- Ayuda -->
     <details id="help" class="panel">
       <summary>Cómo jugar</summary>
@@ -87,11 +105,20 @@
         <li><b>V sostenida:</b> restablecer la vista</li>
         <li><b>Mano abierta:</b> descansar</li>
       </ul>
-      <h3>🎲 Parqués</h3>
+      <h3>🎲 Juegos de mesa</h3>
       <ul>
-        <li><b>Fichas:</b> suéltalas cerca de una casilla y se acomodan solas (el anillo blanco muestra dónde caerán)</li>
-        <li><b>Dados:</b> agárralos y lánzalos, o usa el botón; el resultado aparece arriba</li>
+        <li><b>Casillas imantadas:</b> suelta una pieza cerca de una casilla y se acomoda sola (el anillo blanco muestra dónde caerá)</li>
+        <li><b>Parqués:</b> varias fichas en una casilla se reparten; los dados se lanzan con la mano o con el botón</li>
+        <li><b>Ajedrez:</b> suelta tu pieza sobre una rival y la rival se va sola a la zona de capturadas</li>
+        <li><b>Damas:</b> suelta una ficha sobre otra para coronarla</li>
+        <li><b>Triki:</b> una pieza por casilla</li>
         <li>Las reglas las ponen los jugadores 🙂</li>
+      </ul>
+      <h3>🌐 Mesa compartida</h3>
+      <ul>
+        <li>Todos los que se unan ven y mueven las mismas piezas</li>
+        <li>El cursor de cada jugador aparece con su color y nombre</li>
+        <li>Una pieza que otro tiene en la mano brilla con su color y no se puede tomar</li>
       </ul>
       <h3>🖱️ Sin cámara</h3>
       <ul>
@@ -106,6 +133,7 @@
         <a href="https://github.com/soetgdeznsgk" target="_blank" rel="noopener noreferrer">Emiliano Guerra Gallego</a>
       </p>
     </details>
+    </div>
 
     <!-- Vista de la camara con el esqueleto de las manos encima -->
     <div id="camera-container">

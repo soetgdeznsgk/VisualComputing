@@ -3,12 +3,11 @@
 // ============================================================
 // No programa las reglas: pone el tablero, las 16 fichas en sus carceles
 // y 2 dados, y los jugadores mueven las fichas a mano. Las casillas son
-// imantadas: una ficha soltada cerca de una casilla se acomoda sola.
+// imantadas en modo 'spread': varias fichas en una casilla se reparten
+// en sus esquinas.
 // ============================================================
 
-import * as THREE from 'three';
 import { BOARD_SIZE, CELL, PLAYERS, JAIL_SLOTS, gridToWorld, snapPoints } from './parquesLayout.js';
-import { getParquesTexture } from './parquesTexture.js';
 import { pieceById } from '../pieceCatalog.js';
 
 /** Centro de la zona de los dados: a la derecha del tablero, sobre la mesa. */
@@ -19,21 +18,9 @@ export const parques = {
   name: 'Parqués',
   ui: { buildPalette: false, trash: false, dice: true },
   camera: { radius: 30, phi: 0.62, theta: 0, targetY: 0 },
-  cell: CELL,
+  mat: { size: BOARD_SIZE, texture: 'parques' },
+  snap: { points: snapPoints(), cell: CELL, mode: 'spread' },
   diceZone: DICE_ZONE,
-  snapPoints: snapPoints(),
-
-  /** Tapete con el dibujo del tablero, apoyado sobre la mesa. */
-  createMat() {
-    const mesh = new THREE.Mesh(
-      new THREE.PlaneGeometry(BOARD_SIZE, BOARD_SIZE),
-      new THREE.MeshStandardMaterial({ map: getParquesTexture(), roughness: 0.6 }),
-    );
-    mesh.rotation.x = -Math.PI / 2;
-    mesh.position.y = 0.005; // apenas encima de la mesa para que no parpadee
-    mesh.receiveShadow = true;
-    return mesh;
-  },
 
   /** Piezas iniciales: 4 fichas por color en su carcel y 2 dados. */
   setup() {

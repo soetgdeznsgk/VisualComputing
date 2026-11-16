@@ -1,5 +1,5 @@
 // ============================================================
-// bodyControl.js — Llevar un cuerpo fisico a una pose objetivo
+// sim/bodyControl.js — Llevar un cuerpo fisico a una pose objetivo
 // ============================================================
 // En vez de teletransportar una pieza (lo que la haria atravesar a las
 // demas), se le da la velocidad necesaria para llegar a la posicion y
@@ -8,8 +8,8 @@
 //   velocidad        = (objetivo - posicion) * ganancia
 //   velocidad angular = eje * angulo_que_falta * ganancia
 //
-// Lo usan interaction.js (pieza agarrada) y snapping.js (ficha que se
-// desliza al centro de una casilla).
+// Lo usa simulation.js para la pieza agarrada y para las fichas que se
+// deslizan al centro de una casilla.
 // ============================================================
 
 import * as THREE from 'three';

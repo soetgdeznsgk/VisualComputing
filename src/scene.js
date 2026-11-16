@@ -1,14 +1,14 @@
 // ============================================================
 // scene.js — Escena 3D: renderer, luces y mesa de juego
 // ============================================================
-// Crea todo lo que es "fijo" en el mundo: la mesa de madera con su
-// borde (visual + colisiones), el piso, las luces y las sombras.
-// Las piezas se manejan en pieces.js y la camara en cameraRig.js.
+// Dibuja todo lo que es "fijo" en el mundo: la mesa de madera con su
+// borde, el tapete del tablero actual, el piso, las luces y las sombras.
+// Las piezas se dibujan en pieceViews.js y la camara esta en cameraRig.js.
 // ============================================================
 
 import * as THREE from 'three';
 import { TABLE, CAMERA } from './config.js';
-import { addStaticBox } from './physics.js';
+import { tableParts } from './sim/table.js';
 import { getWoodTexture, applyBoxUV } from './woodTexture.js';
 
 export let scene;
@@ -30,7 +30,7 @@ export function initScene(canvasEl) {
   scene.background = new THREE.Color(0x1d2233);
   scene.fog = new THREE.Fog(0x1d2233, 90, 180);
 
-  camera = new THREE.PerspectiveCamera(CAMERA.fov, window.innerWidth / window.innerHeight, 0.5, 500);
+  camera = new THREE.PerspectiveCamera(CAMERA.fov, (window.innerWidth / window.innerHeight) || 16 / 9, 0.5, 500);
 
   addLights();
   addTable();
@@ -59,22 +59,19 @@ function addLights() {
   scene.add(fill);
 }
 
-/** Mesa: tablero + 4 bordes. Cada parte tiene malla y cuerpo fisico. */
+/**
+ * Mesa: tablero + 4 bordes. Usa las mismas medidas que las colisiones de
+ * sim/table.js (la fisica no se crea aqui: la crea la simulacion).
+ */
 function addTable() {
-  const { width: W, depth: D, thickness: T, rimHeight: RH, rimWidth: RW } = TABLE;
   const wood = getWoodTexture();
   const topMat = new THREE.MeshStandardMaterial({ map: wood, color: 0xc89060, roughness: 0.75 });
   const rimMat = new THREE.MeshStandardMaterial({ map: wood, color: 0x8a5a34, roughness: 0.7 });
 
-  // Tablero: su cara de arriba queda exactamente en y = 0
-  addBlock({ x: W / 2, y: T / 2, z: D / 2 }, { x: 0, y: -T / 2, z: 0 }, topMat, false);
-
-  // Bordes: dos largos (frente/fondo) y dos cortos (lados)
-  const y = RH / 2;
-  addBlock({ x: W / 2 + RW, y: RH / 2, z: RW / 2 }, { x: 0, y, z: D / 2 + RW / 2 }, rimMat, true);
-  addBlock({ x: W / 2 + RW, y: RH / 2, z: RW / 2 }, { x: 0, y, z: -D / 2 - RW / 2 }, rimMat, true);
-  addBlock({ x: RW / 2, y: RH / 2, z: D / 2 }, { x: W / 2 + RW / 2, y, z: 0 }, rimMat, true);
-  addBlock({ x: RW / 2, y: RH / 2, z: D / 2 }, { x: -W / 2 - RW / 2, y, z: 0 }, rimMat, true);
+  // Tablero (cara de arriba en y = 0) y bordes
+  for (const { part, half, position } of tableParts()) {
+    addBlock(half, position, part === 'top' ? topMat : rimMat, part === 'rim');
+  }
 
   // Piso lejano para recibir sombra y dar sensacion de profundidad (sin fisica)
   const floor = new THREE.Mesh(
@@ -94,10 +91,27 @@ function addBlock(half, pos, material, castShadow) {
   mesh.receiveShadow = true;
   mesh.castShadow = castShadow;
   scene.add(mesh);
-  addStaticBox(half, pos);
+}
+
+let mat = null;
+
+/**
+ * Cambia el tapete del tablero que esta sobre la mesa (null = ninguno).
+ * @param {THREE.Mesh|null} mesh
+ */
+export function setBoardMat(mesh) {
+  if (mat) {
+    scene.remove(mat);
+    mat.geometry.dispose();
+    mat.material.dispose(); // la textura se conserva en cache para la proxima vez
+  }
+  mat = mesh;
+  if (mat) scene.add(mat);
 }
 
 function onResize() {
+  // Una ventana minimizada u oculta puede medir 0: no dejar la camara con NaN
+  if (!window.innerWidth || !window.innerHeight) return;
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight, false);
