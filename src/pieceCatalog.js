@@ -14,10 +14,22 @@
 //
 // Para agregar una pieza nueva: anadir una entrada a PIECES con
 // id, name, icon (SVG) y build().
+//
+// Opciones de cada entrada:
+//   palette: false     no aparece en la caja de bloques (fichas, dados, ajedrez...)
+//   material           'wood' (por defecto) | 'plastic' | 'die'
+//   snappable: true    se acomoda en las casillas imantadas (sim/snapping.js)
+//   restHeight         altura del centro de masa en reposo (para acomodarla)
+//   stackHeight        alto de la pieza al apilarla (damas coronadas)
+//   keepUV: true       conserva los UV originales (el dado usa una textura por cara)
+//
+// Este archivo lo usan el navegador (geometria + fisica) y el servidor
+// (solo la fisica, con buildBody). No toca el DOM.
 // ============================================================
 
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { applyBoxUV } from './woodTexture.js';
 
 // ------------------------------------------------------------
@@ -111,6 +123,85 @@ function circlePoints(r, segments, from = 0, to = Math.PI * 2, closed = true) {
 /** Rota vertices de "eje Z" a "eje Y" (para cilindros de pie). */
 function zToY(vertices) {
   return vertices.map((v) => new THREE.Vector3(v.x, v.z, -v.y));
+}
+
+/** Forma fisica de cilindro de pie (16 lados) entre y0 e y1. */
+function uprightCylinderShape(radius, y0, y1) {
+  const poly = prismPolyhedron(circlePoints(radius, 16), y1 - y0);
+  return {
+    shape: makeConvex(zToY(poly.vertices), poly.faces),
+    offset: new CANNON.Vec3(0, (y0 + y1) / 2, 0),
+  };
+}
+
+/** Une varias geometrias en una (todas no indexadas, con normal y uv). */
+function merge(geos) {
+  return mergeGeometries(geos.map((g) => {
+    const ng = g.index ? g.toNonIndexed() : g;
+    ng.clearGroups();
+    return ng;
+  }));
+}
+
+/**
+ * Pieza "torneada" (como las de ajedrez): una silueta que se gira
+ * alrededor del eje Y. La fisica es un cilindro del mismo alto.
+ * @param {Array<[number, number]>} profile — puntos (radio, altura) desde la base
+ * @param {object} o
+ * @param {number} o.radius — radio del cilindro de colision
+ * @param {number} [o.height] — alto total si las geometrias extra sobresalen de la silueta
+ * @param {number} [o.base] — altura del centro de masa sobre la base (por defecto 35% del alto)
+ * @param {THREE.BufferGeometry[]} [o.extra] — geometrias extra (en coordenadas desde la base)
+ */
+function turned(profile, { radius, height: totalHeight, base, extra = [] }) {
+  const height = totalHeight ?? Math.max(...profile.map(([, y]) => y));
+  const b = base ?? height * 0.35;
+  return () => {
+    const lathe = new THREE.LatheGeometry(profile.map(([r, y]) => new THREE.Vector2(r, y)), 28);
+    const geometry = extra.length ? merge([lathe, ...extra.map((g) => g.clone())]) : lathe;
+    geometry.translate(0, -b, 0);
+    return {
+      geometry,
+      shapes: [uprightCylinderShape(radius, -b, height - b)],
+      volume: Math.PI * radius * radius * height * 0.5,
+      size: height / 2,
+    };
+  };
+}
+
+/** Cabeza del caballo: silueta extruida (mirando hacia -Z, hacia el rival). */
+function knightHead() {
+  const pts = [
+    [-0.36, 0.35], [0.36, 0.35], [0.3, 0.6], [0.22, 0.82], [0.28, 1.0], [0.58, 1.14],
+    [0.64, 1.3], [0.52, 1.42], [0.22, 1.46], [0.12, 1.72], [0.0, 1.56], [-0.16, 1.76],
+    [-0.27, 1.5], [-0.42, 1.2], [-0.44, 0.8], [-0.4, 0.5],
+  ];
+  const shape = new THREE.Shape(pts.map(([x, y]) => new THREE.Vector2(x, y)));
+  const geo = new THREE.ExtrudeGeometry(shape, { depth: 0.42, bevelEnabled: true, bevelSize: 0.04, bevelThickness: 0.04, bevelSegments: 2 });
+  geo.translate(0, 0, -0.21);
+  geo.rotateY(Math.PI / 2); // la nariz (+X) pasa a mirar hacia -Z
+  return geo;
+}
+
+/** Cruz de la corona del rey. */
+function kingCross() {
+  const v = new THREE.BoxGeometry(0.16, 0.52, 0.16);
+  v.translate(0, 2.24, 0);
+  const h = new THREE.BoxGeometry(0.44, 0.14, 0.16);
+  h.translate(0, 2.3, 0);
+  return merge([v, h]);
+}
+
+/** Almenas de la torre: 4 bloques sobre el borde superior. */
+function rookBattlements() {
+  const geos = [];
+  for (let k = 0; k < 4; k++) {
+    const g = new THREE.BoxGeometry(0.2, 0.18, 0.2);
+    const a = (k * Math.PI) / 2 + Math.PI / 4;
+    g.translate(Math.cos(a) * 0.38, 1.69, Math.sin(a) * 0.38);
+    geos.push(g);
+  }
+  return merge(geos);
 }
 
 // ------------------------------------------------------------
@@ -273,7 +364,165 @@ export const PIECES = [
       size: 1,
     }),
   },
+
+  // --- Piezas de juegos de mesa (no salen en la caja de bloques) ---
+  {
+    id: 'pawn',
+    name: 'Ficha',
+    palette: false,
+    material: 'plastic',
+    snappable: true,      // se acomoda en las casillas del tablero
+    restHeight: 0.3,      // altura del centro de masa cuando esta de pie
+    build: () => {
+      // Silueta de peon (radio, altura) que se gira alrededor del eje Y.
+      // La base queda en y = -0.3, asi el origen esta cerca del centro de masa
+      // (la base es la parte mas pesada) y la ficha se para con estabilidad.
+      const profile = [
+        [0, 0], [0.24, 0], [0.24, 0.06], [0.2, 0.11], [0.13, 0.28], [0.1, 0.48],
+        [0.15, 0.53], [0.17, 0.62], [0.15, 0.71], [0.09, 0.77], [0, 0.8],
+      ].map(([r, y]) => new THREE.Vector2(r, y - 0.3));
+      const geometry = new THREE.LatheGeometry(profile, 24);
+      // Fisica: cilindro de 16 lados del mismo alto (-0.3 .. 0.5)
+      const poly = prismPolyhedron(circlePoints(0.22, 16), 0.8);
+      return {
+        geometry,
+        shapes: [{ shape: makeConvex(zToY(poly.vertices), poly.faces), offset: new CANNON.Vec3(0, 0.1, 0) }],
+        volume: 0.35,
+        size: 0.4,
+      };
+    },
+  },
+  {
+    id: 'die',
+    name: 'Dado',
+    palette: false,
+    material: 'die',      // 6 materiales, uno por cara (ver diceTextures.js)
+    keepUV: true,         // cada cara usa la textura completa
+    build: box(1.4, 1.4, 1.4),
+  },
+
+  // --- Ajedrez (casillas de 2 unidades) ---
+  chessPiece('chessPawn', 'Peón', [
+    [0, 0], [0.55, 0], [0.55, 0.1], [0.45, 0.18], [0.42, 0.24], [0.28, 0.32], [0.2, 0.62],
+    [0.3, 0.68], [0.3, 0.74], [0.18, 0.78], [0.27, 0.88], [0.3, 1.0], [0.27, 1.12], [0.18, 1.22], [0, 1.3],
+  ], { radius: 0.48 }),
+  chessPiece('rook', 'Torre', [
+    [0, 0], [0.6, 0], [0.6, 0.12], [0.5, 0.2], [0.47, 0.28], [0.36, 0.36], [0.34, 1.1],
+    [0.45, 1.2], [0.47, 1.28], [0.47, 1.6], [0.3, 1.6], [0.3, 1.48], [0, 1.48],
+  ], { radius: 0.52, height: 1.78, extra: [rookBattlements()] }),
+  chessPiece('knight', 'Caballo', [
+    [0, 0], [0.6, 0], [0.6, 0.12], [0.5, 0.2], [0.46, 0.3], [0.4, 0.4], [0, 0.4],
+  ], { radius: 0.52, height: 1.76, base: 0.6, extra: [knightHead()] }),
+  chessPiece('bishop', 'Alfil', [
+    [0, 0], [0.6, 0], [0.6, 0.12], [0.5, 0.2], [0.47, 0.28], [0.3, 0.38], [0.22, 1.0],
+    [0.36, 1.06], [0.36, 1.12], [0.24, 1.16], [0.32, 1.32], [0.34, 1.46], [0.26, 1.64],
+    [0.12, 1.76], [0.1, 1.8], [0.13, 1.84], [0.09, 1.9], [0, 1.92],
+  ], { radius: 0.52 }),
+  chessPiece('queen', 'Reina', [
+    [0, 0], [0.65, 0], [0.65, 0.12], [0.55, 0.2], [0.5, 0.3], [0.32, 0.42], [0.24, 1.3],
+    [0.38, 1.38], [0.38, 1.44], [0.26, 1.5], [0.3, 1.62], [0.44, 1.9], [0.36, 1.95],
+    [0.2, 1.98], [0.14, 2.04], [0.15, 2.12], [0.08, 2.18], [0, 2.2],
+  ], { radius: 0.56 }),
+  chessPiece('king', 'Rey', [
+    [0, 0], [0.65, 0], [0.65, 0.12], [0.55, 0.2], [0.5, 0.3], [0.32, 0.42], [0.25, 1.35],
+    [0.4, 1.42], [0.4, 1.48], [0.27, 1.54], [0.34, 1.7], [0.42, 1.95], [0.3, 2.0], [0, 2.0],
+  ], { radius: 0.56, height: 2.5, extra: [kingCross()] }),
+
+  // --- Damas ---
+  {
+    id: 'checker',
+    name: 'Ficha de damas',
+    palette: false,
+    snappable: true,
+    restHeight: 0.15,
+    stackHeight: 0.3,     // dos fichas apiladas = dama coronada
+    build: () => {
+      // Disco con el centro un poco hundido, como las fichas de madera
+      const profile = [[0, 0], [0.72, 0], [0.75, 0.03], [0.75, 0.27], [0.72, 0.3], [0.52, 0.3], [0.46, 0.25], [0, 0.25]];
+      const geometry = new THREE.LatheGeometry(profile.map(([r, y]) => new THREE.Vector2(r, y)), 36);
+      geometry.translate(0, -0.15, 0);
+      return {
+        geometry,
+        shapes: [uprightCylinderShape(0.75, -0.15, 0.15)],
+        volume: Math.PI * 0.75 * 0.75 * 0.3,
+        size: 0.75,
+      };
+    },
+  },
+
+  // --- Triki (tres en linea) ---
+  {
+    id: 'ticX',
+    name: 'X',
+    palette: false,
+    material: 'plastic',
+    snappable: true,
+    restHeight: 0.25,
+    build: () => {
+      // Dos barras cruzadas a +-45 grados
+      const bar = (angle) => {
+        const g = new THREE.BoxGeometry(3, 0.5, 0.6);
+        g.rotateY(angle);
+        return g;
+      };
+      const half = new CANNON.Vec3(1.5, 0.25, 0.3);
+      const orient = (angle) => new CANNON.Quaternion().setFromEuler(0, angle, 0);
+      return {
+        geometry: merge([bar(Math.PI / 4), bar(-Math.PI / 4)]),
+        shapes: [
+          { shape: new CANNON.Box(half), orientation: orient(Math.PI / 4) },
+          { shape: new CANNON.Box(half), orientation: orient(-Math.PI / 4) },
+        ],
+        volume: 1.6,
+        size: 1.5,
+      };
+    },
+  },
+  {
+    id: 'ticO',
+    name: 'O',
+    palette: false,
+    material: 'plastic',
+    snappable: true,
+    restHeight: 0.3,
+    build: () => {
+      const geometry = new THREE.TorusGeometry(1.05, 0.3, 16, 40);
+      geometry.rotateX(Math.PI / 2);
+      return {
+        geometry,
+        // Un aro no es convexo; para apoyarlo sobre el tablero basta un disco
+        shapes: [uprightCylinderShape(1.35, -0.3, 0.3)],
+        volume: 1.6,
+        size: 1.35,
+      };
+    },
+  },
 ];
+
+/**
+ * Definicion de una pieza de ajedrez (madera, se acomoda en las casillas
+ * y su centro de masa queda bajo, como en las piezas reales con plomo).
+ */
+function chessPiece(id, name, profile, opts) {
+  const height = opts.height ?? Math.max(...profile.map(([, y]) => y));
+  const base = opts.base ?? height * 0.35;
+  return {
+    id,
+    name,
+    palette: false,
+    snappable: true,
+    restHeight: base,
+    build: turned(profile, { ...opts, height, base }),
+  };
+}
+
+/** Piezas que salen en la caja de bloques de construccion. */
+export const BUILD_PIECES = PIECES.filter((p) => p.palette !== false);
+
+/** Definicion de una pieza por su id. */
+export function pieceById(id) {
+  return PIECES.find((p) => p.id === id);
+}
 
 /** Colores de juguete. 'mix' elige uno al azar para cada pieza nueva. */
 export const COLORS = [
@@ -287,8 +536,12 @@ export const COLORS = [
   { id: 'purple', name: 'Morado', hex: '#8c5bb5' },
 ];
 
-/** Devuelve el hex de un color del catalogo ('mix' = uno al azar). */
+/**
+ * Devuelve el hex de un color: acepta un id del catalogo ('mix' = uno al
+ * azar) o directamente un hex ('#d9473b', lo usan los tableros).
+ */
 export function resolveColor(colorId) {
+  if (colorId?.startsWith?.('#')) return colorId;
   const solid = COLORS.filter((c) => c.hex);
   const found = COLORS.find((c) => c.id === colorId);
   if (found?.hex) return found.hex;
@@ -299,15 +552,29 @@ export function resolveColor(colorId) {
 const built = new Map();
 
 /**
- * Devuelve la definicion construida de una pieza (con cache).
- * Las formas fisicas se crean nuevas cada vez porque cannon-es
- * no permite compartir una forma entre cuerpos de forma segura.
+ * Solo la parte fisica de una pieza (la usa la simulacion, tambien en el
+ * servidor, donde no se dibuja nada). Las formas se crean nuevas cada vez
+ * porque cannon-es no permite compartir una forma entre cuerpos.
+ * @returns {{def, shapes, volume, size}}
  */
-export function buildPiece(id) {
-  const def = PIECES.find((p) => p.id === id);
+export function buildBody(id) {
+  const def = pieceById(id);
   if (!def) throw new Error(`Pieza desconocida: ${id}`);
-  const fresh = def.build();
-  if (!built.has(id)) built.set(id, applyBoxUV(fresh.geometry));
-  else fresh.geometry.dispose();
-  return { def, ...fresh, geometry: built.get(id) };
+  const { geometry, ...rest } = def.build();
+  geometry.dispose();
+  return { def, ...rest };
+}
+
+/**
+ * Geometria visual de una pieza (la usa el navegador). Se construye una
+ * sola vez por tipo y se comparte entre todas las piezas de ese tipo.
+ */
+export function pieceGeometry(id) {
+  if (!built.has(id)) {
+    const def = pieceById(id);
+    if (!def) throw new Error(`Pieza desconocida: ${id}`);
+    const { geometry } = def.build();
+    built.set(id, def.keepUV ? geometry : applyBoxUV(geometry));
+  }
+  return built.get(id);
 }

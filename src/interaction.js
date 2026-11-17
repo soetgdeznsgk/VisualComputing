@@ -12,18 +12,20 @@
 //      la mano a la camara (palma mas grande) la empuja hacia el fondo;
 //      alejarla la trae hacia ti.
 //   4. Rotar: girar la muneca gira la pieza alrededor del eje de la vista.
-//   5. Soltar: la pieza conserva su velocidad (se puede lanzar) y la
-//      fisica se encarga de que caiga y choque.
+//   5. Soltar: la pieza conserva su velocidad (se puede lanzar). Si es una
+//      ficha y el tablero tiene casillas imantadas, se acomoda sola.
 //
-// La pieza agarrada NO se teletransporta: en cada paso de la fisica se le
-// da la velocidad necesaria para llegar al objetivo. Asi sigue chocando
-// con las demas piezas y las empuja en vez de atravesarlas.
+// Este modulo solo CALCULA la pose objetivo de la pieza (posicion y
+// rotacion) con la camara y la mano de este jugador. Quien la mueve es la
+// mesa activa (`table`): la simulacion local o el servidor en red, que le
+// dan a la pieza la velocidad necesaria para llegar al objetivo (asi sigue
+// chocando con las demas en vez de atravesarlas).
 // ============================================================
 
 import * as THREE from 'three';
 import { GRAB, TABLE } from './config.js';
-import { onPreStep } from './physics.js';
-import { pieces, pieceFromMesh, pieceMeshes, setHighlight, removePiece } from './pieces.js';
+import { hasView, viewFromMesh, viewMeshes, allViews, setGlow, setHoverGlow } from './pieceViews.js';
+import { updateSnapPreview, hideSnapPreview } from './snapPreview.js';
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
@@ -41,12 +43,15 @@ const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 /** Estado publico (lo lee la interfaz). */
 export const interaction = {
   state: 'idle',   // 'idle' | 'hover' | 'holding'
-  hovered: null,   // pieza bajo el cursor
-  held: null,      // pieza agarrada
+  hovered: null,   // vista de la pieza bajo el cursor
+  held: null,      // vista de la pieza agarrada
+  point: null,     // punto 3D al que apunta este jugador (para los demas jugadores)
 };
 
 const raycaster = new THREE.Raycaster();
 const ndc = new THREE.Vector2();
+const tablePlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+const planeHit = new THREE.Vector3();
 let prevGrab = false;
 
 // Ultima pieza apuntada (ver "agarre tolerante" en updateInteraction)
@@ -64,67 +69,56 @@ const grab = {
   targetQuat: new THREE.Quaternion(), // como deberia estar rotada
 };
 
-// Temporales reutilizados (evita crear objetos cada frame)
 const tmpQ = new THREE.Quaternion();
-const tmpQ2 = new THREE.Quaternion();
 const forward = new THREE.Vector3();
 
-function setHovered(piece) {
-  if (interaction.hovered === piece) return;
-  if (interaction.hovered !== interaction.held) setHighlight(interaction.hovered, false);
-  interaction.hovered = piece;
-  setHighlight(piece, true);
-}
-
-function startHold(piece, hitPoint, camera, intent) {
-  interaction.held = piece;
+function startHold(view, hitPoint, camera, intent, table) {
+  if (table.isHeldByOther(view) || !table.grab(view.id)) return;
+  interaction.held = view;
   grab.distance = camera.position.distanceTo(hitPoint);
-  grab.offset.copy(piece.body.position).sub(hitPoint);
+  grab.offset.copy(view.mesh.position).sub(hitPoint);
   grab.depthStart = intent.depth;
   grab.rollStart = intent.roll;
-  grab.startQuat.copy(piece.body.quaternion);
-  grab.target.copy(piece.body.position);
+  grab.startQuat.copy(view.mesh.quaternion);
+  grab.target.copy(view.mesh.position);
   grab.targetQuat.copy(grab.startQuat);
-  setHighlight(piece, true);
 }
 
-/**
- * Suelta la pieza agarrada.
- * @returns {object|null} la pieza soltada
- */
-function release() {
-  const piece = interaction.held;
-  if (!piece) return null;
-  const v = piece.body.velocity;
-  const speed = v.length();
-  // Limitar la velocidad de lanzamiento y frenar el giro para que no salga disparada
-  if (speed > GRAB.maxThrowSpeed) v.scale(GRAB.maxThrowSpeed / speed, v);
-  piece.body.angularVelocity.scale(0.3, piece.body.angularVelocity);
+/** Suelta la pieza agarrada. */
+function release(table) {
+  const view = interaction.held;
+  if (!view) return null;
+  table.release(view.id);
   interaction.held = null;
-  setHighlight(piece, piece === interaction.hovered);
-  return piece;
+  hideSnapPreview();
+  return view;
 }
 
 /**
- * Llamar una vez por frame (antes de la fisica).
+ * Llamar una vez por frame (antes de actualizar la mesa).
  * @param {PointerIntent} intent
  * @param {THREE.PerspectiveCamera} camera
- * @param {(screen:{x,y}) => boolean} isOverTrash — si el cursor esta sobre la papelera
+ * @param {object} table — LocalTable o RemoteTable
+ * @param {object} options
+ * @param {(screen:{x,y}) => boolean} options.isOverTrash — si el cursor esta sobre la papelera
+ * @param {string} options.boardId — tablero actual (para el anillo de casillas)
  * @returns {{trashed: boolean}} si en este frame se tiro una pieza a la papelera
  */
-export function updateInteraction(intent, camera, isOverTrash) {
+export function updateInteraction(intent, camera, table, { isOverTrash, boardId }) {
   const result = { trashed: false };
 
-  // Si una pieza fue eliminada por otro lado (boton "Limpiar", cayo de la
-  // mesa), olvidarla para no seguir moviendola.
-  if (interaction.held && !pieces.includes(interaction.held)) interaction.held = null;
-  if (interaction.hovered && !pieces.includes(interaction.hovered)) interaction.hovered = null;
+  // Si una pieza desaparecio (boton "Limpiar", cambio de tablero, la
+  // elimino otro jugador), olvidarla.
+  if (interaction.held && !hasView(interaction.held)) interaction.held = null;
+  if (interaction.hovered && !hasView(interaction.hovered)) interaction.hovered = null;
 
   if (!intent.active) {
-    if (interaction.held) release();
-    setHovered(null);
+    if (interaction.held) release(table);
+    interaction.hovered = null;
+    interaction.point = null;
     prevGrab = false;
     interaction.state = 'idle';
+    updateGlows(table);
     return result;
   }
 
@@ -137,25 +131,24 @@ export function updateInteraction(intent, camera, isOverTrash) {
 
   if (interaction.held) {
     if (grabEnded) {
-      const piece = release();
-      if (piece && isOverTrash(intent.screen)) {
-        if (interaction.hovered === piece) interaction.hovered = null;
-        removePiece(piece);
+      const view = release(table);
+      if (view && isOverTrash(intent.screen)) {
+        table.remove(view.id);
         result.trashed = true;
       }
     } else {
       updateTarget(intent, camera);
+      table.hold(interaction.held.id, grab.target, grab.targetQuat);
+      updateSnapPreview(interaction.held, boardId);
     }
   }
 
+  let hit = null;
   if (!interaction.held) {
     // Buscar la pieza bajo el cursor (no si esta sobre un panel)
-    let hit = null;
-    if (!intent.overUI) {
-      hit = raycaster.intersectObjects(pieceMeshes(), false)[0] ?? null;
-    }
-    setHovered(hit ? pieceFromMesh(hit.object) : null);
-    if (hit) lastHit = { piece: interaction.hovered, point: hit.point.clone(), time: performance.now() };
+    if (!intent.overUI) hit = raycaster.intersectObjects(viewMeshes(), false)[0] ?? null;
+    interaction.hovered = hit ? viewFromMesh(hit.object) : null;
+    if (hit) lastHit = { view: interaction.hovered, point: hit.point.clone(), time: performance.now() };
 
     // Solo se agarra si el pellizco EMPIEZA sobre una pieza: pellizcar en el
     // aire y luego pasar por encima de una pieza no la toma.
@@ -164,15 +157,37 @@ export function updateInteraction(intent, camera, isOverTrash) {
     // apuntada si fue hace muy poco.
     if (grabStarted) {
       if (hit && interaction.hovered) {
-        startHold(interaction.hovered, hit.point, camera, intent);
-      } else if (lastHit && performance.now() - lastHit.time < STICKY_MS && pieces.includes(lastHit.piece)) {
-        startHold(lastHit.piece, lastHit.point, camera, intent);
+        startHold(interaction.hovered, hit.point, camera, intent, table);
+      } else if (lastHit && performance.now() - lastHit.time < STICKY_MS && hasView(lastHit.view)) {
+        startHold(lastHit.view, lastHit.point, camera, intent, table);
       }
     }
   }
 
+  // Punto al que apunta este jugador (lo ven los demas en multijugador)
+  if (interaction.held) interaction.point = interaction.held.mesh.position.clone();
+  else if (hit) interaction.point = hit.point.clone();
+  else interaction.point = raycaster.ray.intersectPlane(tablePlane, planeHit)?.clone() ?? null;
+
   interaction.state = interaction.held ? 'holding' : interaction.hovered ? 'hover' : 'idle';
+  updateGlows(table);
   return result;
+}
+
+/**
+ * Brillo de las piezas: la que esta bajo el cursor o en la mano brilla
+ * calido; las que sostienen otros jugadores brillan con su color.
+ */
+function updateGlows(table) {
+  for (const view of allViews()) {
+    if (view === interaction.held || view === interaction.hovered) {
+      setHoverGlow(view, true);
+    } else if (table.isHeldByOther(view)) {
+      setGlow(view, new THREE.Color(table.playerColor(view.heldBy)).multiplyScalar(0.45));
+    } else {
+      setHoverGlow(view, false);
+    }
+  }
 }
 
 /** Calcula donde y como deberia estar la pieza agarrada. */
@@ -200,38 +215,10 @@ function updateTarget(intent, camera) {
   grab.targetQuat.copy(tmpQ).multiply(grab.startQuat);
 }
 
-/**
- * Control de la pieza agarrada en cada sub-paso de la fisica.
- * Velocidad lineal: proporcional a la distancia al objetivo.
- * Velocidad angular: proporcional al angulo que falta para la rotacion objetivo.
- */
-onPreStep(() => {
-  const piece = interaction.held;
-  if (!piece) return;
-  const body = piece.body;
-  body.wakeUp();
-
-  // --- Posicion ---
-  let vx = (grab.target.x - body.position.x) * GRAB.positionGain;
-  let vy = (grab.target.y - body.position.y) * GRAB.positionGain;
-  let vz = (grab.target.z - body.position.z) * GRAB.positionGain;
-  const speed = Math.hypot(vx, vy, vz);
-  if (speed > GRAB.maxSpeed) {
-    const s = GRAB.maxSpeed / speed;
-    vx *= s; vy *= s; vz *= s;
-  }
-  body.velocity.set(vx, vy, vz);
-
-  // --- Rotacion: error = objetivo * actual^-1, convertido a eje-angulo ---
-  tmpQ2.set(body.quaternion.x, body.quaternion.y, body.quaternion.z, body.quaternion.w).invert();
-  tmpQ.copy(grab.targetQuat).multiply(tmpQ2);
-  if (tmpQ.w < 0) tmpQ.set(-tmpQ.x, -tmpQ.y, -tmpQ.z, -tmpQ.w); // camino mas corto
-  const angle = 2 * Math.acos(clamp(tmpQ.w, -1, 1));
-  const s = Math.sqrt(1 - tmpQ.w * tmpQ.w);
-  if (angle < 1e-3 || s < 1e-6) {
-    body.angularVelocity.set(0, 0, 0);
-  } else {
-    const k = (angle * GRAB.rotationGain) / s;
-    body.angularVelocity.set(tmpQ.x * k, tmpQ.y * k, tmpQ.z * k);
-  }
-});
+/** Suelta lo que se tenga (al cambiar de mesa local <-> red). */
+export function resetInteraction(table) {
+  if (interaction.held) release(table);
+  interaction.held = null;
+  interaction.hovered = null;
+  prevGrab = false;
+}

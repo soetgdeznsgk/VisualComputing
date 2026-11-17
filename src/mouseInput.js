@@ -91,6 +91,8 @@ export function initMouseInput(canvas, rig, { isHolding, onDelete }) {
   }, { passive: false });
 
   window.addEventListener('keydown', (e) => {
+    // Mientras se escribe (por ejemplo el nombre del jugador) las teclas no son controles
+    if (e.target.closest?.('input, textarea')) return;
     const key = e.key.toLowerCase();
     keys.add(key);
     if (key === 'r') rig.reset();

@@ -5,14 +5,19 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build"
+    "lan": "vite --mode lan",
+    "build": "vite build",
+    "preview": "vite preview",
+    "preview:lan": "vite preview --mode lan"
   },
   "dependencies": {
     "@mediapipe/hands": "^0.4.1675469240",
     "cannon-es": "^0.20.0",
-    "three": "^0.160.0"
+    "three": "^0.160.0",
+    "ws": "^8.18.0"
   },
   "devDependencies": {
+    "@vitejs/plugin-basic-ssl": "^1.2.0",
     "vite": "^5.0.0"
   }
 }

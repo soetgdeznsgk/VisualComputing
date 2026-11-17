@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Bloques 3D con Gestos</title>
+  <title>Mesa de juegos 3D con gestos</title>
   <link rel="stylesheet" href="src/styles.css" />
 </head>
 <body>
@@ -13,17 +13,38 @@
 
     <!-- Caja de herramientas: elegir pieza y color (ui.js llena los botones) -->
     <aside id="toolbox" class="panel">
-      <h1>Bloques 3D</h1>
-      <h2>Piezas</h2>
-      <div id="piece-grid"></div>
-      <h2>Color</h2>
-      <div id="color-row"></div>
+      <h1>Mesa de juegos 3D</h1>
+
+      <!-- Selector de tablero (ui.js crea un boton por tablero de boards/index.js) -->
+      <h2>Juego</h2>
+      <div id="board-tabs" role="tablist"></div>
+
+      <!-- Construccion libre -->
+      <section id="build-section">
+        <h2>Piezas</h2>
+        <div id="piece-grid"></div>
+        <h2>Color</h2>
+        <div id="color-row"></div>
+      </section>
+
+      <!-- Parques -->
+      <section id="dice-section" hidden>
+        <h2>Dados</h2>
+        <div id="dice-last">Lanza los dados para empezar</div>
+        <button id="btn-roll" class="dwellable primary" type="button">🎲 Lanzar dados</button>
+        <p class="hint">También puedes agarrar un dado y lanzarlo con la mano.</p>
+      </section>
+
       <div class="actions">
         <button id="btn-clear" class="dwellable" type="button">Limpiar mesa</button>
+        <button id="btn-reset" class="dwellable" type="button" hidden>Reiniciar partida</button>
         <button id="btn-view" class="dwellable" type="button">Restablecer vista</button>
       </div>
       <p id="piece-count"></p>
     </aside>
+
+    <!-- Resultado de los dados (aparece unos segundos al terminar de rodar) -->
+    <div id="dice-result" aria-live="polite"></div>
 
     <!-- Estado de cada mano -->
     <section id="status" class="panel">
@@ -47,8 +68,26 @@
       <small>Suelta aquí una pieza</small>
     </div>
 
+    <!-- Columna derecha: mesa compartida + ayuda -->
+    <div id="side-right">
+    <!-- Mesa compartida (multijugador en red local) -->
+    <section id="net-panel" class="panel">
+      <h2>Mesa compartida</h2>
+      <p id="net-status" data-state="offline">Juegas solo en este computador.</p>
+      <div id="net-join">
+        <label for="player-name" class="hint">Tu nombre</label>
+        <input id="player-name" type="text" maxlength="20" placeholder="Jugador" autocomplete="off" />
+        <button id="btn-join" class="dwellable primary" type="button">Unirse a la mesa compartida</button>
+      </div>
+      <div id="net-online" hidden>
+        <ul id="player-list"></ul>
+        <p id="net-invite" class="hint"></p>
+        <button id="btn-leave" class="dwellable" type="button">Salir y jugar solo</button>
+      </div>
+    </section>
+
     <!-- Ayuda -->
-    <details id="help" class="panel" open>
+    <details id="help" class="panel">
       <summary>Cómo jugar</summary>
       <h3>✋ Mano derecha — piezas</h3>
       <ul>
@@ -66,6 +105,21 @@
         <li><b>V sostenida:</b> restablecer la vista</li>
         <li><b>Mano abierta:</b> descansar</li>
       </ul>
+      <h3>🎲 Juegos de mesa</h3>
+      <ul>
+        <li><b>Casillas imantadas:</b> suelta una pieza cerca de una casilla y se acomoda sola (el anillo blanco muestra dónde caerá)</li>
+        <li><b>Parqués:</b> varias fichas en una casilla se reparten; los dados se lanzan con la mano o con el botón</li>
+        <li><b>Ajedrez:</b> suelta tu pieza sobre una rival y la rival se va sola a la zona de capturadas</li>
+        <li><b>Damas:</b> suelta una ficha sobre otra para coronarla</li>
+        <li><b>Triki:</b> una pieza por casilla</li>
+        <li>Las reglas las ponen los jugadores 🙂</li>
+      </ul>
+      <h3>🌐 Mesa compartida</h3>
+      <ul>
+        <li>Todos los que se unan ven y mueven las mismas piezas</li>
+        <li>El cursor de cada jugador aparece con su color y nombre</li>
+        <li>Una pieza que otro tiene en la mano brilla con su color y no se puede tomar</li>
+      </ul>
       <h3>🖱️ Sin cámara</h3>
       <ul>
         <li>Clic izquierdo: agarrar · Rueda: profundidad / zoom</li>
@@ -79,6 +133,7 @@
         <a href="https://github.com/soetgdeznsgk" target="_blank" rel="noopener noreferrer">Emiliano Guerra Gallego</a>
       </p>
     </details>
+    </div>
 
     <!-- Vista de la camara con el esqueleto de las manos encima -->
     <div id="camera-container">

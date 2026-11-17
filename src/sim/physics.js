@@ -1,13 +1,14 @@
 // ============================================================
-// physics.js — Mundo fisico (cannon-es)
+// sim/physics.js — Mundo fisico (cannon-es)
 // ============================================================
-// Gravedad, colisiones y apilado de las piezas. Three.js solo dibuja;
-// la posicion "real" de cada pieza la decide este mundo fisico y
-// pieces.js la copia a la malla visual cada frame.
+// Gravedad, colisiones y apilado de las piezas. Este archivo NO usa el
+// navegador: lo comparten la mesa local (navegador) y el servidor del
+// multijugador (Node.js). Three.js solo dibuja; la posicion "real" de
+// cada pieza la decide este mundo fisico.
 // ============================================================
 
 import * as CANNON from 'cannon-es';
-import { PHYSICS } from './config.js';
+import { PHYSICS } from '../config.js';
 
 export const world = new CANNON.World({
   gravity: new CANNON.Vec3(0, PHYSICS.gravity, 0),
@@ -46,8 +47,9 @@ export function addStaticBox(half, position) {
 
 /**
  * Funciones que se ejecutan antes de cada sub-paso de la simulacion.
- * interaction.js registra aqui el control de la pieza agarrada, para que
- * se aplique en cada sub-paso y no solo una vez por frame.
+ * simulation.js registra aqui el control de las piezas agarradas y de las
+ * fichas que se deslizan a su casilla, para que se aplique en cada
+ * sub-paso y no solo una vez por frame.
  */
 const preStepHandlers = new Set();
 export function onPreStep(fn) {

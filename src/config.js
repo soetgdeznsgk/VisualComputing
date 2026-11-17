@@ -77,6 +77,24 @@ export const DWELL = {
   timeMs: 900,          // tiempo sobre un boton para "hacer clic"
 };
 
+/** Casillas imantadas (en unidades de "casilla" del tablero actual). */
+export const SNAP = {
+  radius: 0.65,         // a que distancia del centro de una casilla se "pega" la ficha
+  maxHeight: 8,         // si se suelta mas alto que esto, cae libre sin pegarse
+  gain: 12,             // que tan rapido se desliza al centro (1/s)
+  maxSpeed: 14,
+  slotOffset: 0.26,     // desplazamiento cuando varias fichas comparten casilla
+  occupiedRadius: 0.3,  // distancia a la que se considera que un puesto esta ocupado
+};
+
+/** Dados. */
+export const DICE = {
+  rollingSpeed: 1.5,    // por encima de esta velocidad el dado "esta rodando"
+  stillSpeed: 0.08,     // por debajo se considera quieto...
+  stillSpin: 0.15,      // ... si ademas casi no gira
+  settleMs: 250,        // tiempo quieto antes de leer el resultado
+};
+
 /** Raton y teclado (modo sin camara, util para probar). */
 export const MOUSE = {
   orbitSpeed: 0.008,    // radianes por pixel arrastrando con clic derecho
